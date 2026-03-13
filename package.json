@@ -10,7 +10,8 @@
     "dev": "ts-node src/index.ts",
     "dev:dashboard": "cd dashboard && npm run dev",
     "mcp": "ts-node src/mcp/server.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -21,14 +22,20 @@
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "ioredis": "^5.10.0",
     "openai": "^6.27.0",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
+    "@types/pg": "^8.18.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }

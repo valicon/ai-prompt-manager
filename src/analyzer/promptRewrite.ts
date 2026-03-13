@@ -4,7 +4,7 @@ import {
   getProvider,
   getKeyEnvName,
 } from "../llm/providerAdapter";
-import { IMPROVE_PROMPT_SYSTEM, buildImproveUserPrompt } from "../prompts/improveMetaPrompt";
+import { IMPROVE_PROMPT_SYSTEM, buildImproveUserPrompt, type SimilarPatternRef } from "../prompts/improveMetaPrompt";
 import { log, logError } from "../utils/logger";
 import type { AnalysisResult } from "./promptScore";
 
@@ -15,9 +15,14 @@ export interface RewriteResult {
   analysis?: AnalysisResult;
 }
 
+export interface RewriteOptions {
+  similarPatterns?: SimilarPatternRef[];
+}
+
 export async function rewritePrompt(
   prompt: string,
-  _apiKey?: string
+  _apiKey?: string,
+  options?: RewriteOptions
 ): Promise<RewriteResult> {
   const provider = getProvider();
   if (!hasValidConfig(provider)) {
@@ -30,10 +35,11 @@ export async function rewritePrompt(
   }
 
   try {
+    const userContent = buildImproveUserPrompt(prompt, options?.similarPatterns);
     const completion = await createChatCompletion(
       [
         { role: "system", content: IMPROVE_PROMPT_SYSTEM },
-        { role: "user", content: buildImproveUserPrompt(prompt) },
+        { role: "user", content: userContent },
       ],
       { response_format: { type: "json_object" } }
     );

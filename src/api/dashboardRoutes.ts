@@ -3,7 +3,7 @@ import { query, getById, getMetrics } from "../db/promptHistory";
 
 const router = Router();
 
-router.get("/prompts", (req: Request, res: Response) => {
+router.get("/prompts", async (req: Request, res: Response) => {
   const q = req.query.q as string | undefined;
   const minScore = req.query.minScore != null ? parseInt(String(req.query.minScore), 10) : undefined;
   const maxScore = req.query.maxScore != null ? parseInt(String(req.query.maxScore), 10) : undefined;
@@ -16,7 +16,7 @@ router.get("/prompts", (req: Request, res: Response) => {
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : undefined;
   const offset = req.query.offset != null ? parseInt(String(req.query.offset), 10) : undefined;
 
-  const { items, total } = query({
+  const { items, total } = await query({
     q: q?.trim() || undefined,
     minScore: Number.isNaN(minScore) ? undefined : minScore,
     maxScore: Number.isNaN(maxScore) ? undefined : maxScore,
@@ -29,14 +29,39 @@ router.get("/prompts", (req: Request, res: Response) => {
   res.json({ items, total });
 });
 
-router.get("/prompts/:id", (req: Request, res: Response) => {
+router.get("/prompts/export", async (req: Request, res: Response) => {
+  const format = (req.query.format as string)?.toLowerCase() || "json";
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 1000;
+  const offset = req.query.offset != null ? parseInt(String(req.query.offset), 10) : 0;
+
+  const { items } = await query({
+    limit: Number.isNaN(limit) ? 1000 : limit,
+    offset: Number.isNaN(offset) ? 0 : offset,
+  });
+
+  if (format === "csv") {
+    const header = "id,original,improved,score,warnings,rewriteSucceeded,createdAt\n";
+    const escape = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+    const rows = items.map(
+      (r) =>
+        `${r.id},${escape(r.original)},${escape(r.improved)},${r.score},${escape(JSON.stringify(r.warnings))},${r.rewriteSucceeded},${r.createdAt}`
+    );
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=prompt-history.csv");
+    res.send(header + rows.join("\n"));
+  } else {
+    res.json(items);
+  }
+});
+
+router.get("/prompts/:id", async (req: Request, res: Response) => {
   const idParam = req.params.id;
   const id = parseInt(Array.isArray(idParam) ? idParam[0] : idParam, 10);
   if (Number.isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const record = getById(id);
+  const record = await getById(id);
   if (!record) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -44,10 +69,10 @@ router.get("/prompts/:id", (req: Request, res: Response) => {
   res.json(record);
 });
 
-router.get("/metrics", (req: Request, res: Response) => {
+router.get("/metrics", async (req: Request, res: Response) => {
   const topN = req.query.topN != null ? parseInt(String(req.query.topN), 10) : 10;
   const days = req.query.days != null ? parseInt(String(req.query.days), 10) : 30;
-  const metrics = getMetrics(
+  const metrics = await getMetrics(
     Number.isNaN(topN) ? 10 : topN,
     Number.isNaN(days) ? 30 : days
   );

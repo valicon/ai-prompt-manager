@@ -4,6 +4,7 @@ import { loadPatterns, type PromptPattern } from "./promptStore";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_SIMILARITY_THRESHOLD = 0.5;
+const EMBEDDING_CACHE_KEY = "promptlab:embeddings";
 
 export function getDefaultDbPath(): string {
   return path.join(process.cwd(), "prompt-db");
@@ -14,6 +15,13 @@ export interface PatternWithEmbedding extends PromptPattern {
 }
 
 let cachedPatterns: PatternWithEmbedding[] | null = null;
+
+function getEmbeddingCacheBackend(): "memory" | "redis" {
+  const env = process.env.EMBEDDING_CACHE?.toLowerCase();
+  if (env === "redis" && process.env.REDIS_URL) return "redis";
+  return "memory";
+}
+
 
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
@@ -56,7 +64,35 @@ export async function computeEmbeddings(
 }
 
 export async function initEmbeddings(dbPath: string): Promise<void> {
+  const backend = getEmbeddingCacheBackend();
+  if (backend === "redis") {
+    try {
+      const mod = await import("ioredis");
+      const Redis = (mod as unknown as { default: new (url: string) => { get: (k: string) => Promise<string | null>; disconnect: () => void; set: (k: string, v: string) => Promise<unknown> } }).default;
+      const redis = new Redis(process.env.REDIS_URL!);
+      const cached = await redis.get(EMBEDDING_CACHE_KEY);
+      if (cached) {
+        cachedPatterns = JSON.parse(cached) as PatternWithEmbedding[];
+        redis.disconnect();
+        return;
+      }
+      redis.disconnect();
+    } catch (err) {
+      console.warn("[PromptLab] Redis embedding cache unavailable, using in-memory:", err);
+    }
+  }
   cachedPatterns = await computeEmbeddings(dbPath);
+  if (backend === "redis") {
+    try {
+      const mod = await import("ioredis");
+      const Redis = (mod as unknown as { default: new (url: string) => { get: (k: string) => Promise<string | null>; disconnect: () => void; set: (k: string, v: string) => Promise<unknown> } }).default;
+      const redis = new Redis(process.env.REDIS_URL!);
+      await redis.set(EMBEDDING_CACHE_KEY, JSON.stringify(cachedPatterns));
+      redis.disconnect();
+    } catch (err) {
+      console.warn("[PromptLab] Failed to store embeddings in Redis:", err);
+    }
+  }
 }
 
 export function findBestTemplate(
@@ -109,4 +145,83 @@ export async function findBestTemplateWithEmbeddings(
   }
 
   return best ? { pattern: best.pattern, prompt: best.prompt, tags: best.tags, filePath: best.filePath } : null;
+}
+
+export interface SimilarPattern extends PromptPattern {
+  similarity: number;
+}
+
+async function loadCachedPatterns(dbPath: string, apiKey: string): Promise<PatternWithEmbedding[]> {
+  const backend = getEmbeddingCacheBackend();
+  if (backend === "redis") {
+    try {
+      const mod = await import("ioredis");
+      const Redis = (mod as unknown as { default: new (url: string) => { get: (k: string) => Promise<string | null>; disconnect: () => void; set: (k: string, v: string) => Promise<unknown> } }).default;
+      const redis = new Redis(process.env.REDIS_URL!);
+      const cached = await redis.get(EMBEDDING_CACHE_KEY);
+      redis.disconnect();
+      if (cached) {
+        const parsed = JSON.parse(cached) as PatternWithEmbedding[];
+        cachedPatterns = parsed;
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("[PromptLab] Redis embedding cache unavailable, using in-memory:", err);
+    }
+  }
+  const computed = await computeEmbeddings(dbPath, apiKey);
+  cachedPatterns = computed;
+  if (backend === "redis" && computed.length > 0) {
+    try {
+      const mod = await import("ioredis");
+      const Redis = (mod as unknown as { default: new (url: string) => { get: (k: string) => Promise<string | null>; disconnect: () => void; set: (k: string, v: string) => Promise<unknown> } }).default;
+      const redis = new Redis(process.env.REDIS_URL!);
+      await redis.set(EMBEDDING_CACHE_KEY, JSON.stringify(computed));
+      redis.disconnect();
+    } catch (err) {
+      console.warn("[PromptLab] Failed to store embeddings in Redis:", err);
+    }
+  }
+  return computed;
+}
+
+/** Returns top N similar patterns for the given input. Requires OPENAI_KEY for embeddings. */
+export async function searchSimilarPatterns(
+  userInput: string,
+  topN: number = 3,
+  threshold: number = DEFAULT_SIMILARITY_THRESHOLD,
+  apiKey?: string
+): Promise<SimilarPattern[]> {
+  const key = apiKey ?? process.env.OPENAI_KEY;
+  if (!key) return [];
+
+  let toSearch = cachedPatterns;
+  if (!toSearch || toSearch.length === 0) {
+    toSearch = await loadCachedPatterns(getDefaultDbPath(), key);
+  }
+  if (!toSearch || toSearch.length === 0) return [];
+
+  const client = new OpenAI({ apiKey: key });
+  const resp = await client.embeddings.create({
+    model: EMBEDDING_MODEL,
+    input: userInput,
+  });
+  const inputEmbedding = resp.data[0]?.embedding ?? [];
+
+  const scored = toSearch
+    .map((p) => ({
+      ...p,
+      similarity: cosineSimilarity(inputEmbedding, p.embedding),
+    }))
+    .filter((p) => p.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, topN);
+
+  return scored.map((p) => ({
+    pattern: p.pattern,
+    prompt: p.prompt,
+    tags: p.tags,
+    filePath: p.filePath,
+    similarity: p.similarity,
+  }));
 }

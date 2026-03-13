@@ -84,6 +84,19 @@ export function getKeyEnvName(provider: Provider): string {
   return PROVIDER_CONFIG[provider].keyEnv;
 }
 
+const LLM_RETRY_MAX = Math.max(0, parseInt(process.env.LLM_RETRY_MAX ?? "2", 10) || 2);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isRetryable(status: number, err?: unknown): boolean {
+  if (status >= 500) return true;
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (/fetch|ECONNREFUSED|ETIMEDOUT|network/i.test(msg)) return true;
+  return false;
+}
+
 export async function createChatCompletion(
   messages: ChatMessage[],
   options: CreateChatCompletionOptions = {}
@@ -116,27 +129,46 @@ export async function createChatCompletion(
   }
 
   const endpoint = `${url}/chat/completions`;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  let lastErr: Error | null = null;
 
-  if (!res.ok) {
-    const errText = await res.text();
-    const err = new Error(`LLM request failed: ${res.status} ${errText}`);
-    logError("LLM request failed", err);
-    const hint =
-      res.status === 401
-        ? "Check API key validity"
-        : res.status >= 500
-          ? "Provider may be down, retry later"
-          : "Check request and provider config";
-    log("Remediation: %s", hint);
-    throw err;
+  for (let attempt = 0; attempt <= LLM_RETRY_MAX; attempt++) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        return (await res.json()) as ChatCompletionResponse;
+      }
+
+      const errText = await res.text();
+      const err = new Error(`LLM request failed: ${res.status} ${errText}`);
+      if (!isRetryable(res.status) || attempt >= LLM_RETRY_MAX) {
+        logError("LLM request failed", err);
+        const hint =
+          res.status === 401
+            ? "Check API key validity"
+            : res.status >= 500
+              ? "Provider may be down, retry later"
+              : "Check request and provider config";
+        log("Remediation: %s", hint);
+        throw err;
+      }
+      lastErr = err;
+      const delay = Math.pow(2, attempt) * 1000;
+      log("LLM 5xx, retry %d/%d in %dms", attempt + 1, LLM_RETRY_MAX, delay);
+      await sleep(delay);
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      if (!isRetryable(0, e) || attempt >= LLM_RETRY_MAX) throw lastErr;
+      const delay = Math.pow(2, attempt) * 1000;
+      log("LLM network error, retry %d/%d in %dms", attempt + 1, LLM_RETRY_MAX, delay);
+      await sleep(delay);
+    }
   }
-
-  return res.json() as Promise<ChatCompletionResponse>;
+  throw lastErr ?? new Error("LLM request failed");
 }
 
 /**

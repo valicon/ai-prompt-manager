@@ -19,11 +19,30 @@ Return valid JSON only, no markdown or extra text:
 
 The improved_prompt MUST be a complete, ready-to-use prompt that expands on the original with better structure, context, and specifications.`;
 
-export function buildImproveUserPrompt(originalPrompt: string): string {
-  return `Prompt to improve:
+export interface SimilarPatternRef {
+  pattern: string;
+  prompt: string;
+  similarity?: number;
+}
+
+export function buildImproveUserPrompt(
+  originalPrompt: string,
+  similarPatterns?: SimilarPatternRef[]
+): string {
+  let body = `Prompt to improve:
 """
 ${originalPrompt}
 """
+`;
 
-Return the JSON with score, problems, suggestions, and improved_prompt.`;
+  if (similarPatterns && similarPatterns.length > 0) {
+    body += "\nSimilar patterns from the library (use as inspiration):\n";
+    for (const p of similarPatterns) {
+      body += `\n--- ${p.pattern} ---\n${p.prompt}\n`;
+    }
+    body += "\n";
+  }
+
+  body += "Return the JSON with score, problems, suggestions, and improved_prompt.";
+  return body;
 }

@@ -1,6 +1,13 @@
 import Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
+import { getStorageBackend } from "./storageAdapter";
+import {
+  insertPostgres,
+  queryPostgres,
+  getByIdPostgres,
+  getMetricsPostgres,
+} from "./promptHistoryPostgres";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "prompts.db");
@@ -16,6 +23,10 @@ function getDb(): Database.Database {
     initDb(db);
   }
   return db;
+}
+
+function usePostgres(): boolean {
+  return getStorageBackend() === "postgres" && !!process.env.DATABASE_URL;
 }
 
 function initDb(database: Database.Database): void {
@@ -64,7 +75,10 @@ export interface PromptRecord {
   createdAt: string;
 }
 
-export function insert(record: InsertRecord): number {
+export async function insert(record: InsertRecord): Promise<number> {
+  if (usePostgres()) {
+    return insertPostgres(record);
+  }
   const database = getDb();
   const stmt = database.prepare(`
     INSERT INTO prompt_history (original, improved, score, warnings, rewrite_succeeded, created_at)
@@ -82,7 +96,12 @@ export function insert(record: InsertRecord): number {
   return result.lastInsertRowid as number;
 }
 
-export function query(filters: QueryFilters = {}): { items: PromptRecord[]; total: number } {
+export async function query(
+  filters: QueryFilters = {}
+): Promise<{ items: PromptRecord[]; total: number }> {
+  if (usePostgres()) {
+    return queryPostgres(filters);
+  }
   const database = getDb();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
@@ -152,6 +171,37 @@ export function query(filters: QueryFilters = {}): { items: PromptRecord[]; tota
   return { items, total };
 }
 
+export async function getById(id: number): Promise<PromptRecord | null> {
+  if (usePostgres()) {
+    return getByIdPostgres(id);
+  }
+  const database = getDb();
+  const row = database
+    .prepare(
+      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+       FROM prompt_history WHERE id = ?`
+    )
+    .get(id) as {
+    id: number;
+    original: string;
+    improved: string;
+    score: number;
+    warnings: string;
+    rewrite_succeeded: number;
+    created_at: string;
+  } | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    original: row.original,
+    improved: row.improved,
+    score: row.score,
+    warnings: JSON.parse(row.warnings || "[]") as string[],
+    rewriteSucceeded: row.rewrite_succeeded === 1,
+    createdAt: row.created_at,
+  };
+}
+
 export interface MetricsResult {
   avgScore: number;
   totalCount: number;
@@ -161,7 +211,10 @@ export interface MetricsResult {
   volumeByDay: Array<{ date: string; count: number }>;
 }
 
-export function getMetrics(topN = 10, days = 30): MetricsResult {
+export async function getMetrics(topN = 10, days = 30): Promise<MetricsResult> {
+  if (usePostgres()) {
+    return getMetricsPostgres(topN, days);
+  }
   const database = getDb();
   const totalRow = database.prepare("SELECT COUNT(*) as c, AVG(score) as avg FROM prompt_history").get() as {
     c: number;
@@ -248,33 +301,5 @@ function toRecord(r: {
     warnings: JSON.parse(r.warnings || "[]") as string[],
     rewriteSucceeded: r.rewrite_succeeded === 1,
     createdAt: r.created_at,
-  };
-}
-
-export function getById(id: number): PromptRecord | null {
-  const database = getDb();
-  const row = database
-    .prepare(
-      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
-       FROM prompt_history WHERE id = ?`
-    )
-    .get(id) as {
-    id: number;
-    original: string;
-    improved: string;
-    score: number;
-    warnings: string;
-    rewrite_succeeded: number;
-    created_at: string;
-  } | undefined;
-  if (!row) return null;
-  return {
-    id: row.id,
-    original: row.original,
-    improved: row.improved,
-    score: row.score,
-    warnings: JSON.parse(row.warnings || "[]") as string[],
-    rewriteSucceeded: row.rewrite_succeeded === 1,
-    createdAt: row.created_at,
   };
 }
