@@ -168,4 +168,4 @@ Your prompt template here...
 
 ## License
 
-ISC
+MIT License
