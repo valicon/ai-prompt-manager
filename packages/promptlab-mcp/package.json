@@ -1,0 +1,27 @@
+{
+  "name": "promptlab-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for PromptLab prompt upgrade - use from any Cursor workspace via npx",
+  "main": "dist/index.js",
+  "bin": {
+    "promptlab-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "promptlab", "cursor", "prompt-upgrade"],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
+  }
+}
