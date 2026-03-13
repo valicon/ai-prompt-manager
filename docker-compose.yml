@@ -1,0 +1,31 @@
+services:
+  proxy:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - .env
+
+  # Optional: uncomment to use PostgreSQL for prompt history
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: promptlab
+  #     POSTGRES_PASSWORD: promptlab
+  #     POSTGRES_DB: promptlab
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   profiles:
+  #     - postgres
+
+  # Optional: uncomment to use Redis for embedding cache
+  # redis:
+  #   image: redis:7-alpine
+  #   profiles:
+  #     - redis
+
+# volumes:
+#   postgres_data:
