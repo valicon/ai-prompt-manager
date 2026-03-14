@@ -16,7 +16,7 @@ Complete guide to use promptlab-mcp (and `/prompt-fu` / `/prompt-refine` slash c
 
 3. **PromptLab package** – Either:
    - Published to npm: `npx -y promptlab-mcp` works out of the box, or
-   - Local development: `npm link` from `packages/promptlab-mcp` (see [Local testing](#local-testing-before-publish) below).
+   - Local development: `npm link` from `packages/promptlab-mcp` (see [Local Development: Link](#local-development-link-no-npm-publish) below).
 
 ---
 
@@ -115,18 +115,24 @@ Or fully close and reopen Cursor.
 
 ---
 
-## Local Testing (Before Publish)
+## Local Development: Link (No npm Publish)
 
-If the package isn’t published yet:
+Use this when developing on the same machine without publishing to npm. Two options:
 
-1. **Link the package** (from ai-prompt-manager project):
-   ```bash
-   cd packages/promptlab-mcp
-   npm run build
-   npm link
-   ```
+### Option A: Global link (simplest – works for any project)
 
-2. **Use the linked binary** in your MCP config:
+Makes `promptlab-mcp` available as a global command. No `package.json` needed in the other project.
+
+**Step 1 – Build and link** (in ai-prompt-manager):
+
+```bash
+cd /path/to/ai-prompt-manager/packages/promptlab-mcp
+npm install
+npm run build
+npm link
+```
+
+**Step 2 – MCP config** (in the other project's `.cursor/mcp.json`):
    ```json
    {
      "mcpServers": {
@@ -141,10 +147,64 @@ If the package isn’t published yet:
    }
    ```
 
-3. **Unlink when done**:
-   ```bash
-   npm unlink -g promptlab-mcp
-   ```
+**Step 3 – Restart Cursor** and open the other project.
+
+**To unlink later:** `cd packages/promptlab-mcp` then `npm unlink -g promptlab-mcp`
+
+---
+
+### Option B: Project link (per-project, uses npx)
+
+Links the package into the other project's `node_modules`. That project must have a `package.json`.
+
+**Step 1 – Build and register globally** (in ai-prompt-manager):
+
+```bash
+cd /path/to/ai-prompt-manager/packages/promptlab-mcp
+npm install
+npm run build
+npm link
+```
+
+**Step 2 – Link into the other project:**
+
+```bash
+cd /path/to/your-other-project
+npm link promptlab-mcp
+```
+
+**Step 3 – MCP config** (in the other project's `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "promptlab-mcp": {
+      "command": "npx",
+      "args": ["promptlab-mcp"],
+      "env": {
+        "PROMPTLAB_URL": "http://localhost:3010"
+      }
+    }
+  }
+}
+```
+
+**Step 4 – Restart Cursor** and open the other project.
+
+**To unlink later:** `cd your-other-project` then `npm unlink promptlab-mcp`
+
+---
+
+### After code changes in promptlab-mcp
+
+Rebuild so the linked package uses the latest code:
+
+```bash
+cd /path/to/ai-prompt-manager/packages/promptlab-mcp
+npm run build
+```
+
+Then restart Cursor (or reload the MCP server).
 
 ---
 
