@@ -17,6 +17,8 @@ export interface RewriteResult {
 
 export interface RewriteOptions {
   similarPatterns?: SimilarPatternRef[];
+  /** Optional project context (tech stack, domain, constraints) to inject into the improve-prompt LLM call */
+  context?: string;
 }
 
 export async function rewritePrompt(
@@ -35,7 +37,7 @@ export async function rewritePrompt(
   }
 
   try {
-    const userContent = buildImproveUserPrompt(prompt, options?.similarPatterns);
+    const userContent = buildImproveUserPrompt(prompt, options?.similarPatterns, options?.context);
     const completion = await createChatCompletion(
       [
         { role: "system", content: IMPROVE_PROMPT_SYSTEM },

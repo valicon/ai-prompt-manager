@@ -78,9 +78,10 @@ export function createProxyServer() {
       res.status(400).json({ error: "Missing prompt or text" });
       return;
     }
+    const context = typeof req.body?.context === "string" ? req.body.context : undefined;
     log("Upgrade request, prompt length=%d", prompt.length);
     try {
-      const result = await processPrompt(prompt);
+      const result = await processPrompt(prompt, { context });
       log(
         "Upgrade done: score=%d, rewriteSucceeded=%s, improved length=%d",
         result.score,

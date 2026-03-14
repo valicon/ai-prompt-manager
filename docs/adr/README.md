@@ -12,5 +12,6 @@ ADRs capture architecturally significant decisions from OpenSpec archived change
 | [embedding-cache](embedding-cache.md) | In-memory default, Redis optional |
 | [logging](logging.md) | Verbose dev logging, Pino roadmap |
 | [promptlab-roadmap](promptlab-roadmap.md) | Phased evolution, config-driven scale options |
+| [prompt-upgrade-project-context](prompt-upgrade-project-context.md) | Optional project context for prompt upgrade (Omega + OpenSpec) |
 
-Source: `openspec/changes/archive/` (9 archives processed 2026-03-14)
+Source: `openspec/changes/archive/` (10 archives processed 2026-03-14)

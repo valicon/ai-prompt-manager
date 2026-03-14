@@ -18,14 +18,17 @@ server.registerTool(
       "Upgrade a prompt using PromptLab. Calls the /upgrade endpoint to analyze and improve the prompt. Returns the improved prompt. Requires PromptLab proxy to be running (npm run dev).",
     inputSchema: {
       prompt: z.string().describe("The prompt text to upgrade"),
+      context: z.string().optional().describe("Optional project context (tech stack, domain, constraints) to tailor the upgrade"),
     },
   },
-  async ({ prompt }: { prompt: string }) => {
+  async ({ prompt, context }: { prompt: string; context?: string }) => {
     try {
+      const body: { prompt: string; context?: string } = { prompt };
+      if (context && context.trim()) body.context = context.trim();
       const res = await fetch(`${PROMPTLAB_URL.replace(/\/$/, "")}/upgrade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {

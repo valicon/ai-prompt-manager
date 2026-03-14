@@ -19,6 +19,8 @@ export interface PipelineOptions {
   usePatternSearch?: boolean;
   /** Max similar patterns to inject when usePatternSearch is true. Default 3. */
   patternSearchTopN?: number;
+  /** Optional project context (tech stack, domain, constraints) to inject into the improve-prompt LLM call */
+  context?: string;
 }
 
 const DEFAULT_SKIP_REWRITE_ABOVE_SCORE = 80;
@@ -66,6 +68,7 @@ export async function processPrompt(
 
   const { improved, rewriteSucceeded } = await rewritePrompt(prompt, undefined, {
     similarPatterns,
+    context: options.context,
   });
 
   return {
