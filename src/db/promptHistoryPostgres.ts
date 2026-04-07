@@ -37,6 +37,9 @@ async function initSchema(p: Pool): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_prompt_history_score ON prompt_history(score);
     CREATE INDEX IF NOT EXISTS idx_prompt_history_rewrite_succeeded ON prompt_history(rewrite_succeeded);
   `);
+  // Migrations for new columns (IF NOT EXISTS is supported in PG)
+  await p.query("ALTER TABLE prompt_history ADD COLUMN IF NOT EXISTS feedback TEXT");
+  await p.query("ALTER TABLE prompt_history ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE");
 }
 
 let initialized = false;
@@ -118,7 +121,7 @@ export async function queryPostgres(
   const offsetParam = paramIdx + 1;
 
   const selectRes = await p.query(
-    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
      FROM prompt_history ${whereClause}
      ORDER BY created_at DESC
      LIMIT $${limitParam} OFFSET $${offsetParam}`,
@@ -133,6 +136,8 @@ export async function queryPostgres(
     warnings: Array.isArray(r.warnings) ? r.warnings : JSON.parse(r.warnings || "[]"),
     rewriteSucceeded: Boolean(r.rewrite_succeeded),
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    feedback: r.feedback ?? null,
+    pinned: Boolean(r.pinned),
   }));
 
   return { items, total };
@@ -154,14 +159,14 @@ export async function getMetricsPostgres(
       : 0;
 
   const topRes = await p.query(
-    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
      FROM prompt_history ORDER BY score DESC LIMIT $1`,
     [topN]
   );
   const topPrompts = topRes.rows.map(toRecord);
 
   const worstRes = await p.query(
-    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
      FROM prompt_history ORDER BY score ASC LIMIT $1`,
     [topN]
   );
@@ -208,14 +213,16 @@ function toRecord(r: Record<string, unknown>): PromptRecord {
     warnings: Array.isArray(r.warnings) ? (r.warnings as string[]) : JSON.parse((r.warnings as string) || "[]"),
     rewriteSucceeded: Boolean(r.rewrite_succeeded),
     createdAt:
-      r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+      r.created_at instanceof Date ? (r.created_at as Date).toISOString() : String(r.created_at),
+    feedback: (r.feedback as string | null) ?? null,
+    pinned: Boolean(r.pinned),
   };
 }
 
 export async function getByIdPostgres(id: number): Promise<PromptRecord | null> {
   const p = await ensureInit();
   const res = await p.query(
-    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+    `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
      FROM prompt_history WHERE id = $1`,
     [id]
   );
@@ -229,5 +236,31 @@ export async function getByIdPostgres(id: number): Promise<PromptRecord | null> 
     warnings: Array.isArray(r.warnings) ? r.warnings : JSON.parse(r.warnings || "[]"),
     rewriteSucceeded: Boolean(r.rewrite_succeeded),
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    feedback: r.feedback ?? null,
+    pinned: Boolean(r.pinned),
   };
+}
+
+export async function updateFeedbackPostgres(id: number, feedback: string | null): Promise<PromptRecord | null> {
+  const p = await ensureInit();
+  const res = await p.query(
+    `UPDATE prompt_history SET feedback = $1 WHERE id = $2
+     RETURNING id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned`,
+    [feedback, id]
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return toRecord(r);
+}
+
+export async function updatePinnedPostgres(id: number, pinned: boolean): Promise<PromptRecord | null> {
+  const p = await ensureInit();
+  const res = await p.query(
+    `UPDATE prompt_history SET pinned = $1 WHERE id = $2
+     RETURNING id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned`,
+    [pinned, id]
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return toRecord(r);
 }

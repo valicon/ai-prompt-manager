@@ -13,6 +13,8 @@ import {
 } from "../llm/providerAdapter";
 import { log, logError, setRequestId, clearRequestId } from "../utils/logger";
 import { insert as insertPromptHistory } from "../db/promptHistory";
+import { promptEventEmitter } from "../events/promptEventEmitter";
+import { authMiddleware } from "./authMiddleware";
 import dashboardRoutes from "../api/dashboardRoutes";
 import path from "path";
 
@@ -61,7 +63,7 @@ export function createProxyServer() {
     }
   });
 
-  app.use("/api", dashboardRoutes);
+  app.use("/api", authMiddleware, dashboardRoutes);
 
   const dashboardDist = path.join(process.cwd(), "dashboard", "dist");
   if (fs.existsSync(dashboardDist)) {
@@ -72,7 +74,7 @@ export function createProxyServer() {
   }
 
   // Manual prompt upgrade endpoint (for /prompt-upgrade flow via rules or external tools)
-  app.post("/upgrade", apiRateLimiter, async (req: Request, res: Response) => {
+  app.post("/upgrade", authMiddleware, apiRateLimiter, async (req: Request, res: Response) => {
     const prompt = req.body?.prompt ?? req.body?.text;
     if (typeof prompt !== "string") {
       res.status(400).json({ error: "Missing prompt or text" });
@@ -89,12 +91,23 @@ export function createProxyServer() {
         result.improved.length
       );
       try {
-        await insertPromptHistory({
+        const storedId = await insertPromptHistory({
           original: prompt,
           improved: result.improved,
           score: result.score,
           warnings: result.warnings,
           rewriteSucceeded: result.rewriteSucceeded ?? false,
+        });
+        promptEventEmitter.emit("prompt", {
+          id: storedId,
+          original: prompt,
+          improved: result.improved,
+          score: result.score,
+          warnings: result.warnings,
+          rewriteSucceeded: result.rewriteSucceeded ?? false,
+          createdAt: new Date().toISOString(),
+          feedback: null,
+          pinned: false,
         });
       } catch (storeErr) {
         logError("Failed to store prompt history", storeErr);
@@ -108,7 +121,7 @@ export function createProxyServer() {
     }
   });
 
-  app.post("/upgrade/batch", apiRateLimiter, async (req: Request, res: Response) => {
+  app.post("/upgrade/batch", authMiddleware, apiRateLimiter, async (req: Request, res: Response) => {
     const prompts = req.body?.prompts;
     if (!Array.isArray(prompts)) {
       res.status(400).json({ error: "Missing or invalid prompts array" });
@@ -156,12 +169,23 @@ export function createProxyServer() {
           messages[lastIdx] = { ...lastMsg, content: result.improved };
           log("Proxy: upgraded last message, rewriteSucceeded=%s", result.rewriteSucceeded);
           try {
-            await insertPromptHistory({
+            const storedId = await insertPromptHistory({
               original: content,
               improved: result.improved,
               score: result.score,
               warnings: result.warnings,
               rewriteSucceeded: result.rewriteSucceeded ?? false,
+            });
+            promptEventEmitter.emit("prompt", {
+              id: storedId,
+              original: content,
+              improved: result.improved,
+              score: result.score,
+              warnings: result.warnings,
+              rewriteSucceeded: result.rewriteSucceeded ?? false,
+              createdAt: new Date().toISOString(),
+              feedback: null,
+              pinned: false,
             });
           } catch (storeErr) {
             logError("Failed to store prompt history", storeErr);

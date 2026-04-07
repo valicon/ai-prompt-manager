@@ -4,6 +4,15 @@
 # Cursor related files
 .cursor/
 
+# Claude related files
+.claude/
+CLAUDE.md
+.mcp.json
+
+# Ultron data
+.ultron-data/
+.ultron/
+
 # Prompt history database
 data/
 

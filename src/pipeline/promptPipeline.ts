@@ -1,6 +1,7 @@
 import { scorePrompt } from "../analyzer/promptScore";
 import { rewritePrompt } from "../analyzer/promptRewrite";
 import { searchSimilarPatterns } from "../db/embeddings";
+import { log } from "../utils/logger";
 
 export interface PipelineResult {
   score: number;
@@ -70,6 +71,24 @@ export async function processPrompt(
     similarPatterns,
     context: options.context,
   });
+
+  if (rewriteSucceeded) {
+    const rewrittenScore = scorePrompt(improved).score;
+    if (rewrittenScore <= analysis.score) {
+      // Quality gate: rewrite regressed or didn't improve — discard it
+      log(
+        "Quality gate: discarding rewrite (original=%d, rewritten=%d)",
+        analysis.score,
+        rewrittenScore
+      );
+      return {
+        score: analysis.score,
+        warnings: analysis.problems,
+        improved: prompt,
+        rewriteSucceeded: false,
+      };
+    }
+  }
 
   return {
     score: analysis.score,

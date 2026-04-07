@@ -13,5 +13,6 @@ ADRs capture architecturally significant decisions from OpenSpec archived change
 | [logging](logging.md) | Verbose dev logging, Pino roadmap |
 | [promptlab-roadmap](promptlab-roadmap.md) | Phased evolution, config-driven scale options |
 | [prompt-upgrade-project-context](prompt-upgrade-project-context.md) | Optional project context for prompt upgrade (Omega + OpenSpec) |
+| [promptlab-improvements](promptlab-improvements.md) | Quality gate, diff view, opt-in auth, SSE real-time, feedback/pinning, promote-to-template |
 
-Source: `openspec/changes/archive/` (10 archives processed 2026-03-14)
+Source: `openspec/changes/archive/` (11 archives processed 2026-04-07)

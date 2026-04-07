@@ -7,6 +7,8 @@ import {
   queryPostgres,
   getByIdPostgres,
   getMetricsPostgres,
+  updateFeedbackPostgres,
+  updatePinnedPostgres,
 } from "./promptHistoryPostgres";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -44,6 +46,9 @@ function initDb(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_prompt_history_score ON prompt_history(score);
     CREATE INDEX IF NOT EXISTS idx_prompt_history_rewrite_succeeded ON prompt_history(rewrite_succeeded);
   `);
+  // Migrations: SQLite doesn't support IF NOT EXISTS for columns; use try/catch
+  try { database.exec("ALTER TABLE prompt_history ADD COLUMN feedback TEXT"); } catch { /* already exists */ }
+  try { database.exec("ALTER TABLE prompt_history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
 }
 
 export interface InsertRecord {
@@ -73,6 +78,8 @@ export interface PromptRecord {
   warnings: string[];
   rewriteSucceeded: boolean;
   createdAt: string;
+  feedback: string | null;
+  pinned: boolean;
 }
 
 export async function insert(record: InsertRecord): Promise<number> {
@@ -143,7 +150,7 @@ export async function query(
   const offset = filters.offset ?? 0;
 
   const selectStmt = database.prepare(`
-    SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+    SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
     FROM prompt_history ${whereClause}
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
@@ -156,6 +163,8 @@ export async function query(
     warnings: string;
     rewrite_succeeded: number;
     created_at: string;
+    feedback: string | null;
+    pinned: number;
   }>;
 
   const items: PromptRecord[] = rows.map((r) => ({
@@ -166,6 +175,8 @@ export async function query(
     warnings: JSON.parse(r.warnings || "[]") as string[],
     rewriteSucceeded: r.rewrite_succeeded === 1,
     createdAt: r.created_at,
+    feedback: r.feedback ?? null,
+    pinned: r.pinned === 1,
   }));
 
   return { items, total };
@@ -178,7 +189,7 @@ export async function getById(id: number): Promise<PromptRecord | null> {
   const database = getDb();
   const row = database
     .prepare(
-      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
        FROM prompt_history WHERE id = ?`
     )
     .get(id) as {
@@ -189,6 +200,8 @@ export async function getById(id: number): Promise<PromptRecord | null> {
     warnings: string;
     rewrite_succeeded: number;
     created_at: string;
+    feedback: string | null;
+    pinned: number;
   } | undefined;
   if (!row) return null;
   return {
@@ -199,6 +212,8 @@ export async function getById(id: number): Promise<PromptRecord | null> {
     warnings: JSON.parse(row.warnings || "[]") as string[],
     rewriteSucceeded: row.rewrite_succeeded === 1,
     createdAt: row.created_at,
+    feedback: row.feedback ?? null,
+    pinned: row.pinned === 1,
   };
 }
 
@@ -225,7 +240,7 @@ export async function getMetrics(topN = 10, days = 30): Promise<MetricsResult> {
 
   const topRows = database
     .prepare(
-      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
        FROM prompt_history ORDER BY score DESC LIMIT ?`
     )
     .all(topN) as Array<{
@@ -236,12 +251,14 @@ export async function getMetrics(topN = 10, days = 30): Promise<MetricsResult> {
     warnings: string;
     rewrite_succeeded: number;
     created_at: string;
+    feedback: string | null;
+    pinned: number;
   }>;
   const topPrompts = topRows.map(toRecord);
 
   const worstRows = database
     .prepare(
-      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at
+      `SELECT id, original, improved, score, warnings, rewrite_succeeded, created_at, feedback, pinned
        FROM prompt_history ORDER BY score ASC LIMIT ?`
     )
     .all(topN) as Array<{
@@ -252,6 +269,8 @@ export async function getMetrics(topN = 10, days = 30): Promise<MetricsResult> {
     warnings: string;
     rewrite_succeeded: number;
     created_at: string;
+    feedback: string | null;
+    pinned: number;
   }>;
   const worstPrompts = worstRows.map(toRecord);
 
@@ -292,6 +311,8 @@ function toRecord(r: {
   warnings: string;
   rewrite_succeeded: number;
   created_at: string;
+  feedback?: string | null;
+  pinned?: number;
 }): PromptRecord {
   return {
     id: r.id,
@@ -301,5 +322,32 @@ function toRecord(r: {
     warnings: JSON.parse(r.warnings || "[]") as string[],
     rewriteSucceeded: r.rewrite_succeeded === 1,
     createdAt: r.created_at,
+    feedback: r.feedback ?? null,
+    pinned: r.pinned === 1,
   };
 }
+
+export async function updateFeedback(id: number, feedback: string | null): Promise<PromptRecord | null> {
+  if (usePostgres()) {
+    return updateFeedbackPostgres(id, feedback);
+  }
+  const database = getDb();
+  const result = database.prepare(
+    "UPDATE prompt_history SET feedback = ? WHERE id = ?"
+  ).run(feedback, id);
+  if (result.changes === 0) return null;
+  return getById(id);
+}
+
+export async function updatePinned(id: number, pinned: boolean): Promise<PromptRecord | null> {
+  if (usePostgres()) {
+    return updatePinnedPostgres(id, pinned);
+  }
+  const database = getDb();
+  const result = database.prepare(
+    "UPDATE prompt_history SET pinned = ? WHERE id = ?"
+  ).run(pinned ? 1 : 0, id);
+  if (result.changes === 0) return null;
+  return getById(id);
+}
+
