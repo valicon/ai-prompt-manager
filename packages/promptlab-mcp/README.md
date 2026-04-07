@@ -56,3 +56,19 @@ This works from any workspace—no need to reference the ai-prompt-manager proje
 ## Tools
 
 - **prompt_upgrade** – Sends a prompt to PromptLab's `/upgrade` endpoint and returns the improved prompt with score and warnings.
+
+## Upgrade API — Request Body
+
+The `/upgrade` endpoint expects a JSON body:
+
+```json
+{ "prompt": "string", "context": "string (optional)" }
+```
+
+All callers must send `Content-Type: application/json` with a properly serialized body. The `buildUpgradeRequestBody(prompt, context?)` utility (exported from `src/upgradeBody.ts`) handles normalization:
+
+- `prompt` is coerced to a string (`String(prompt ?? "")`) — `null`/`undefined` become `""`
+- `context` is trimmed and omitted from the body if empty after trimming
+- `JSON.stringify` escapes newlines, tabs, quotes, backslashes, carriage returns, and other control characters automatically
+
+This ensures prompts containing code snippets, file paths, multi-line text, or Unicode are sent without parse errors.

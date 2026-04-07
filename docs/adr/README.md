@@ -14,5 +14,7 @@ ADRs capture architecturally significant decisions from OpenSpec archived change
 | [promptlab-roadmap](promptlab-roadmap.md) | Phased evolution, config-driven scale options |
 | [prompt-upgrade-project-context](prompt-upgrade-project-context.md) | Optional project context for prompt upgrade (Omega + OpenSpec) |
 | [promptlab-improvements](promptlab-improvements.md) | Quality gate, diff view, opt-in auth, SSE real-time, feedback/pinning, promote-to-template |
+| [upgrade-api-json-compliance](upgrade-api-json-compliance.md) | Shared utility + JSON.stringify normalization for upgrade API callers |
+| [mcp-npm-package](mcp-npm-package.md) | Standalone npm package for promptlab-mcp, runnable via npx from any workspace |
 
-Source: `openspec/changes/archive/` (11 archives processed 2026-04-07)
+Source: `openspec/changes/archive/` (13 archives processed 2026-04-07)

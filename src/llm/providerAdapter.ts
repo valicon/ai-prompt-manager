@@ -223,7 +223,7 @@ function getDefaultModel(provider: Provider): string {
     case "openai":
       return "gpt-4o-mini";
     case "openrouter":
-      return "openrouter/free";
+      return "meta-llama/llama-3.1-8b-instruct:free";
     case "ollama":
       return "llama3";
     case "groq":

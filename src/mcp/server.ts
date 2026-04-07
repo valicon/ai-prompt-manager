@@ -3,6 +3,7 @@ const serverDir = path.dirname(require.resolve("@modelcontextprotocol/sdk/server
 const { McpServer } = require(path.join(serverDir, "mcp.js"));
 const { StdioServerTransport } = require(path.join(serverDir, "stdio.js"));
 const { z } = require("zod");
+const { buildUpgradeRequestBody } = require("../utils/upgradeBody");
 
 const PROMPTLAB_URL = process.env.PROMPTLAB_URL ?? "http://localhost:3000";
 
@@ -23,12 +24,10 @@ server.registerTool(
   },
   async ({ prompt, context }: { prompt: string; context?: string }) => {
     try {
-      const body: { prompt: string; context?: string } = { prompt };
-      if (context && context.trim()) body.context = context.trim();
       const res = await fetch(`${PROMPTLAB_URL.replace(/\/$/, "")}/upgrade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: buildUpgradeRequestBody(prompt, context),
       });
 
       if (!res.ok) {

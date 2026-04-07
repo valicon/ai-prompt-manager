@@ -44,3 +44,4 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+/src/db/__fixtures__/prompt-db
